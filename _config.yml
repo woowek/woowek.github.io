@@ -1,4 +1,4 @@
 title: "내 블로그"
 description: "GitHub Pages에서 Jekyll을 이용한 블로그"
-theme: minima # 기본 테마 (변경 가능)
+theme: Just The Docs # 기본 테마 (변경 가능)
 paginate: 5
