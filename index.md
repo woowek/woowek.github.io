@@ -3,7 +3,7 @@ title: Home
 layout: home
 nav_order: 1
 description: "Woowek's personal documentation site - Browse technical notes and documents"
-permalink: /docs/documents
+permalink: /
 ---
 
 개인 기술 문서와 노트를 정리한 공간입니다.
