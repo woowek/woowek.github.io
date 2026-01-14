@@ -10,8 +10,11 @@ nav_order: 2
   📂 Loading documents from repository...
 </div>
 <div id="error" style="display:none; padding: 20px; background: #fee; border: 1px solid #fcc; border-radius: 4px; color: #c00;"></div>
-<div id="file-list"></div>
-<div id="content" style="margin-top: 30px;"></div>
+
+<div class="documents-container">
+  <div id="file-tree" class="file-tree"></div>
+  <div id="content" class="content-area"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
@@ -20,6 +23,7 @@ const REPO_NAME = 'documents';
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 
 let allFiles = [];
+let fileTree = {};
 
 // Repository의 파일 목록 가져오기 (재귀적)
 async function fetchFiles(path = '') {
@@ -38,7 +42,8 @@ async function fetchFiles(path = '') {
     }
     
     if (path === '') {
-      displayFileList();
+      buildFileTree();
+      displayFileTree();
       document.getElementById('loading').style.display = 'none';
     }
   } catch (error) {
@@ -51,43 +56,125 @@ async function fetchFiles(path = '') {
   }
 }
 
-// 파일 목록 표시
-function displayFileList() {
-  const fileListDiv = document.getElementById('file-list');
+// 파일 트리 구조 생성
+function buildFileTree() {
+  fileTree = {};
+  
+  allFiles.forEach(file => {
+    const parts = file.path.split('/');
+    let current = fileTree;
+    
+    // 폴더 구조 생성
+    for (let i = 0; i < parts.length - 1; i++) {
+      const folderName = parts[i];
+      if (!current[folderName]) {
+        current[folderName] = { _type: 'folder', _files: {} };
+      }
+      current = current[folderName]._files;
+    }
+    
+    // 파일 추가
+    const fileName = parts[parts.length - 1];
+    current[fileName] = {
+      _type: 'file',
+      path: file.path,
+      download_url: file.download_url,
+      html_url: file.html_url
+    };
+  });
+}
+
+// 트리 HTML 생성
+function createTreeHTML(tree, level = 0) {
+  let html = '';
+  const entries = Object.entries(tree).sort((a, b) => {
+    // 폴더를 파일보다 먼저 표시
+    if (a[1]._type === 'folder' && b[1]._type === 'file') return -1;
+    if (a[1]._type === 'file' && b[1]._type === 'folder') return 1;
+    return a[0].localeCompare(b[0]);
+  });
+  
+  entries.forEach(([name, data]) => {
+    if (name.startsWith('_')) return; // 메타데이터 스킵
+    
+    const indent = level * 20;
+    
+    if (data._type === 'folder') {
+      const folderId = 'folder-' + Math.random().toString(36).substr(2, 9);
+      html += `
+        <div class="tree-folder" style="margin-left: ${indent}px;">
+          <div class="folder-header" onclick="toggleFolder('${folderId}')">
+            <span class="folder-icon">📁</span>
+            <span class="folder-name">${name}</span>
+          </div>
+          <div id="${folderId}" class="folder-content">
+            ${createTreeHTML(data._files, level + 1)}
+          </div>
+        </div>
+      `;
+    } else if (data._type === 'file') {
+      html += `
+        <div class="tree-file" style="margin-left: ${indent}px;">
+          <a href="#" onclick="loadFile('${data.path}', '${data.download_url}'); return false;" class="file-link">
+            <span class="file-icon">📄</span>
+            <span class="file-name">${name}</span>
+          </a>
+        </div>
+      `;
+    }
+  });
+  
+  return html;
+}
+
+// 파일 트리 표시
+function displayFileTree() {
+  const fileTreeDiv = document.getElementById('file-tree');
   
   if (allFiles.length === 0) {
-    fileListDiv.innerHTML = '<p style="color: #666;">📭 마크다운 파일을 찾을 수 없습니다.</p>';
+    fileTreeDiv.innerHTML = '<p style="color: #666; padding: 20px;">📭 마크다운 파일을 찾을 수 없습니다.</p>';
     return;
   }
   
   let html = `
-    <h2>📑 파일 목록 (총 ${allFiles.length}개)</h2>
-    <div style="border: 1px solid #e1e4e8; border-radius: 6px; overflow: hidden;">
+    <div class="tree-header">
+      <h3>📂 Files (${allFiles.length})</h3>
+    </div>
+    <div class="tree-content">
+      ${createTreeHTML(fileTree)}
+    </div>
   `;
   
-  allFiles.forEach((file, index) => {
-    const bgColor = index % 2 === 0 ? '#f6f8fa' : '#fff';
-    html += `
-      <div style="padding: 12px 16px; background: ${bgColor}; border-bottom: 1px solid #e1e4e8; display: flex; justify-content: space-between; align-items: center;">
-        <a href="#" onclick="loadFile('${file.path}', '${file.download_url}'); return false;" 
-           style="color: #0366d6; text-decoration: none; flex: 1;">
-          📄 ${file.path}
-        </a>
-        <a href="${file.html_url}" target="_blank" 
-           style="color: #586069; font-size: 12px; margin-left: 10px;">
-          GitHub에서 보기 →
-        </a>
-      </div>
-    `;
-  });
+  fileTreeDiv.innerHTML = html;
+}
+
+// 폴더 토글
+function toggleFolder(folderId) {
+  const folder = document.getElementById(folderId);
+  const header = folder.previousElementSibling;
+  const icon = header.querySelector('.folder-icon');
   
-  html += '</div>';
-  fileListDiv.innerHTML = html;
+  if (folder.style.display === 'none') {
+    folder.style.display = 'block';
+    icon.textContent = '📂';
+  } else {
+    folder.style.display = 'none';
+    icon.textContent = '📁';
+  }
 }
 
 // 파일 내용 로드 및 마크다운 렌더링
 async function loadFile(path, downloadUrl) {
   const contentDiv = document.getElementById('content');
+  
+  // 모든 파일 링크의 active 클래스 제거
+  document.querySelectorAll('.file-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  
+  // 클릭된 파일 링크에 active 클래스 추가
+  event.target.closest('.file-link').classList.add('active');
+  
   contentDiv.innerHTML = '<p style="text-align: center; padding: 20px; color: #666;">📖 파일을 불러오는 중...</p>';
   
   try {
@@ -98,14 +185,12 @@ async function loadFile(path, downloadUrl) {
     const html = marked.parse(markdown);
     
     contentDiv.innerHTML = `
-      <div style="border: 2px solid #0366d6; border-radius: 8px; padding: 24px; background: #fff;">
-        <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e1e4e8;">
-          <h2 style="margin: 0; color: #0366d6;">📄 ${path}</h2>
-          <p style="margin: 8px 0 0 0; color: #586069; font-size: 14px;">
-            <a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/${path}" target="_blank">
-              GitHub에서 원본 보기 →
-            </a>
-          </p>
+      <div class="document-viewer">
+        <div class="document-header">
+          <h2>📄 ${path}</h2>
+          <a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/${path}" target="_blank" class="github-link">
+            GitHub에서 보기 →
+          </a>
         </div>
         <div class="markdown-body">
           ${html}
@@ -128,6 +213,166 @@ fetchFiles();
 </script>
 
 <style>
+/* 레이아웃 */
+.documents-container {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.file-tree {
+  width: 300px;
+  min-width: 300px;
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 0;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  position: sticky;
+  top: 20px;
+}
+
+.content-area {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 트리 헤더 */
+.tree-header {
+  padding: 16px;
+  border-bottom: 1px solid #e1e4e8;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tree-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #24292e;
+}
+
+.tree-content {
+  padding: 8px 0;
+}
+
+/* 폴더 스타일 */
+.tree-folder {
+  margin: 2px 0;
+}
+
+.folder-header {
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.folder-header:hover {
+  background: #e1e4e8;
+}
+
+.folder-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.folder-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #24292e;
+}
+
+.folder-content {
+  display: block;
+  margin-left: 8px;
+  border-left: 1px solid #d1d5da;
+  padding-left: 4px;
+}
+
+/* 파일 스타일 */
+.tree-file {
+  margin: 1px 0;
+}
+
+.file-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  text-decoration: none;
+  color: #0366d6;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.file-link:hover {
+  background: #e1e4e8;
+  text-decoration: none;
+}
+
+.file-link.active {
+  background: #0366d6;
+  color: #fff;
+}
+
+.file-link.active .file-name {
+  color: #fff;
+  font-weight: 600;
+}
+
+.file-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.file-name {
+  font-size: 13px;
+  color: #24292e;
+  word-break: break-word;
+}
+
+/* 문서 뷰어 */
+.document-viewer {
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  padding: 24px;
+  background: #fff;
+}
+
+.document-header {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e1e4e8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.document-header h2 {
+  margin: 0;
+  color: #0366d6;
+  font-size: 24px;
+}
+
+.github-link {
+  color: #586069;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.github-link:hover {
+  text-decoration: underline;
+}
+
+/* 마크다운 본문 스타일 */
 .markdown-body {
   line-height: 1.6;
 }
@@ -220,5 +465,18 @@ fetchFiles();
   border: none;
   border-top: 1px solid #e1e4e8;
   margin: 24px 0;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .documents-container {
+    flex-direction: column;
+  }
+  
+  .file-tree {
+    width: 100%;
+    max-height: 400px;
+    position: static;
+  }
 }
 </style>
