@@ -24,12 +24,54 @@ const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 
 let allFiles = [];
 let fileTree = {};
+const CACHE_KEY = 'woowek_docs_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5분
+
+// 캐시에서 데이터 가져오기
+function getCache() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < CACHE_DURATION) {
+        return data.files;
+      }
+    }
+  } catch (e) {
+    console.error('Cache error:', e);
+  }
+  return null;
+}
+
+// 캐시에 데이터 저장
+function setCache(files) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      files: files,
+      timestamp: Date.now()
+    }));
+  } catch (e) {
+    console.error('Cache save error:', e);
+  }
+}
 
 // Repository의 파일 목록 가져오기 (재귀적)
 async function fetchFiles(path = '') {
   try {
-    const response = await fetch(`${API_BASE}/contents/${path}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // GitHub API 호출 시 헤더 추가
+    const response = await fetch(`${API_BASE}/contents/${path}`, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+    if (!response.ok) {
+      // Rate limit 확인
+      const remaining = response.headers.get('X-RateLimit-Remaining');
+      const errorMsg = remaining === '0' 
+        ? 'GitHub API rate limit 초과. 잠시 후 다시 시도해주세요.' 
+        : `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMsg);
+    }
     
     const data = await response.json();
     
@@ -209,7 +251,28 @@ async function loadFile(path, downloadUrl) {
 }
 
 // 페이지 로드 시 파일 목록 가져오기
-fetchFiles();
+(async function() {
+  // 먼저 캐시 확인
+  const cached = getCache();
+  if (cached && cached.length > 0) {
+    allFiles = cached;
+    buildFileTree();
+    displayFileTree();
+    document.getElementById('loading').innerHTML = '✅ 캐시에서 로드됨 (5분간 유효)';
+    setTimeout(() => {
+      document.getElementById('loading').style.display = 'none';
+    }, 2000);
+    return;
+  }
+  
+  // 캐시가 없으면 API 호출
+  try {
+    await fetchFiles();
+    setCache(allFiles);
+  } catch (error) {
+    console.error('Failed to fetch files:', error);
+  }
+})();
 </script>
 
 <style>
