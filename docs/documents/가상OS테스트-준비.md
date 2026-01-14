@@ -1,0 +1,19 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `가상OS테스트/준비.md`
+
+---
+
+
+- server pc : https://m.bunjang.co.kr/products/274505038?ref=%EC%83%81%EC%A0%90%EC%A0%84%EC%B2%B4%EC%83%81%ED%92%88
+
+
+
+
+- 설치 OS : kubevert

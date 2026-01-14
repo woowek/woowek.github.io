@@ -1,0 +1,93 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `지난 프로젝트/ezSafer/작업 내용/8. 암호화 처리.md`
+
+---
+
+>로직
+---
+1. C로 구성된 암호화 라이브러리를 JNI 처리
+2. JNI(java)
+3. JNI(C)
+4. JNI(build)
+
+>>JNI(java)
+* JNI 처리를 하가위한 java소스
+```java
+package egovframework.common.util;
+@Component
+public class KlibUtil {
+private static class KlibCipher implements Cipher {
+    @Override
+    public native byte[] encrypt(byte[] originBytes);
+    @Override
+    public native byte[] decrypt(byte[] encryptedBytes);
+}
+```
+
+>>JNI(C)
+* JNI 처리를 하가위한 C소스
+* 규격에 맞는 함수명 구성 필요
+* JAVA_패키지경로_클래스명_00024하위클래스명_함수명
+* 00024는 $의 치환문자이다.
+```C
+JNIEXPORT jbyteArray JNICALL Java_egovframework_common_util_KlibUtil_00024KlibCipher_encrypt
+  (JNIEnv *, jobject, jbyteArray);
+
+JNIEXPORT jbyteArray JNICALL Java_egovframework_common_util_KlibUtil_00024KlibCipher_decrypt
+  (JNIEnv *, jobject, jbyteArray);
+```
+
+>>JNI(build)
+* C/C++로 구현한 라이브러리 빌드
+* OS별로 구분
+* 이 자료에서는 Windows : visual studio2022/ linux : CentOS 7 환경에서 빌드
+1. windows
+    - jni.h, jni_md.h를 외부 종속성 추가
+    
+    <img src="./img/jniWindows.png" width="50%" height="50%"/>
+
+    - 경로는 'JDK 경로/include'
+    - 빌드는 서버 구동 OS에 맞게 빌드(32bit/64bit)
+    - 시스템 환경변수에 Path에 JNI 라이브러리 위치 등록
+2. linux
+    - 여기는 빌드할때 별도의 참조 설정이 필요하다. 
+    - 환경변수를 설정했다면 JAVA_HOME으로 JDK 경로 설정해도된다..
+    - /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.402.b06-1.el7_9.x86_64/include
+    - /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.402.b06-1.el7_9.x86_64/include/linux
+    ```
+    gcc -I/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.402.b06-1.el7_9.x86_64/include -I/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.402.b06-1.el7_9.x86_64/include/linux  -lklib -c -fPIC egovframework_common_util_KlibUtil_KlibCipher.c
+    gcc -shared -o libezKlib.so -lklib  egovframework_common_util_KlibUtil_KlibCipher.o
+    ```
+
+>>load
+* 빌드한 라이브러리를 로드한다.
+```java
+Path libraryPath = Paths.get(servletContext.getResource(libPath).toURI());
+//log.debug("libraryPath : " + libraryPath);
+
+// native library load
+System.load(libraryPath.toString());
+```
+
+
+>>JNI 초기 로드시 에러처리 : already loaded in another classloader
+* 서버를 구동시 또는 재시작시 자주 나오는 JNI 로드 에러이다.
+* 라이브러리를 루트랑 컨텍스트가 따로 처리하다보니 한 라이브러리를 볼 때 오류가 난다..
+* 컨텍스트 설정 안하고 ROOT.war로 실행한다면야 정상실행되긴 한다..
+* 해결 방법
+  - /usr/lib/ 경로에 JNI 라이브러리를 넣는다.
+  - 또는 홈 디렉토리/.bash_profile 파일에 LD_LIBRARY_PATH 를 추가후 아래에 export LD_LIBRARY_PATH 입력후 저장 후 source .bash_profile 실행
+  ```
+  LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/home/hosting_users/test/module/okname
+  export LD_LIBRARY_PATH
+  ```
+  - server.xml 의 host 항목에 deployOnStartup="false" 를 추가한다.
+  
+

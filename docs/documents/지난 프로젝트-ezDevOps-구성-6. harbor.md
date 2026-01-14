@@ -1,0 +1,33 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `지난 프로젝트/ezDevOps/구성/6. harbor.md`
+
+---
+
+> harbor
+---
+
+- 구성
+```sh
+kubectl create namespace harbor
+kubectl create secret tls harbor-tls --cert=STAR.kaoni.com_crt.pem --key=STAR.kaoni.com_key.pem -n harbor
+```
+```sh
+helm repo add harbor https://helm.goharbor.io
+helm repo update
+helm upgrade --install harbor harbor/harbor -n harbor --create-namespace -f harbor_values.yaml
+```
+
+- 삭제
+```sh
+helm uninstall harbor -n harbor || true
+kubectl delete ns harbor --ignore-not-found
+```
+
+3. https

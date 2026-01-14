@@ -1,0 +1,20 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `kubernetes/cka practice/10. trouble shooting/4. Troubleshooting network.md`
+
+---
+
+1. **Troubleshooting Test 1:** A simple 2 tier application is deployed in the triton namespace. It must display a green web page on success. Click on the app tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.<br>
+Stick to the given architecture. Use the same names and port numbers as given in the below architecture diagram. Feel free to edit, delete or recreate objects as necessary.
+    - curl -L https://github.com/weaveworks/weave/releases/download/latest_release/weave-daemonset-k8s-1.11.yaml | kubectl apply -f - 실행
+
+
+2. **Troubleshooting Test 2:** The same 2 tier application is having issues again. It must display a green web page on success. Click on the app tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.<br>
+Stick to the given architecture. Use the same names and port numbers as given in the below architecture diagram. Feel free to edit, delete or recreate objects as necessary.
+    -   kubectl -n kube-system edit ds kube-proxy 로 daemonset 수정

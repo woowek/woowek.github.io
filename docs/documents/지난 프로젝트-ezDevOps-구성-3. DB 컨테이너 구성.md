@@ -1,0 +1,33 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `지난 프로젝트/ezDevOps/구성/3. DB 컨테이너 구성.md`
+
+---
+
+> DB 컨테이너 구성
+---
+
+1. 구성
+```sh
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+helm search repo bitnami/mariadb
+helm upgrade --install mariadb bitnami/mariadb -n mariadb --create-namespace -f mariadb_values.yaml
+```
+
+2. 삭제
+```sh
+helm uninstall mariadb -n mariadb || true
+kubectl delete namespace mariadb --ignore-not-found
+```
+
+
+
+
+

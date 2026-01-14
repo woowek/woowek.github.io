@@ -1,0 +1,223 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `지난 프로젝트/ezSafer/작업 내용/4. 뷰어(java).md`
+
+---
+
+>로직
+---
+1. 세션으로 권한정보 읽은 후 메뉴 노출 처리
+2. 다운받은 문서정보 xml파일로 문서정보 조회 후 파일 다운로드
+3. 다운받은 파일 pdf 변환
+    - 이미지 : pdfbox로 서버 내부에서 변경
+    - 기타 : ezRendition으로 soap 호출
+4. 파일 워터마크 처리 후 파일 열기(pdf.js)
+
+
+
+>>세션 처리
+```java
+HttpSession session = req.getSession();
+session.setAttribute("docId", docId);
+session.setAttribute("userId", userInfo.getUserId());
+session.setAttribute("userName", userInfo.getUserName());
+```
+
+>>이미지 pdf 변경
+* pdf작업은 pdfbox로 처리
+* tiff의 경우 이미지 분할 후 재조합
+* 일반 이미지
+```java
+InputStream inputStream = new FileInputStream(orgFile);
+BufferedImage bufferedImage = ImageIO.read(inputStream);
+
+//리사이징 처리
+BufferedImage resizeBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+Graphics2D graphics2D = resizeBufferedImage.createGraphics();
+graphics2D.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+graphics2D.drawImage(bufferedImage, 0, 0, width, height, null);
+graphics2D.dispose();
+
+// PDF 페이지 객체 1장 생성
+PDPage page = new PDPage(new PDRectangle(width, height));
+pdfDoc.addPage(page);
+
+// PDF 문서 객체에 페이지 1장 그리기
+PDImageXObject pdImage = LosslessFactory.createFromImage(pdfDoc, resizeBufferedImage);
+PDPageContentStream contentStream = new PDPageContentStream(pdfDoc, page);
+contentStream.drawImage(pdImage, 0, 0, width, height);
+
+// 1장 그릴 때마다 사용한 객체 닫기
+contentStream.close();
+inputStream.close();
+```
+
+* tiff 이미지
+    - tiff파일에서 이미지 정보 추출 후 pdf페이지에 그린다.
+    - tiff이미지 추출은 JAI 사용
+```java
+SeekableStream seekableStream = new FileSeekableStream(orgFile);
+ImageDecoder imageDecoder = ImageCodec.createImageDecoder("tiff", seekableStream, null);
+RenderedImage renderedImage[];
+renderedImage = new RenderedImage[imageDecoder.getNumPages()];
+int count = 0;
+for (int i = 0; i < imageDecoder.getNumPages(); i++) {
+    renderedImage[i] = imageDecoder.decodeAsRenderedImage(i);
+    count++;
+}
+
+String orgFileName_NoExt = orgFile.getName().substring(0, orgFile.getName().lastIndexOf("."));
+for (int i = 0; i < count; i++) {
+    ParameterBlock parameterBlock = new ParameterBlock();
+    parameterBlock.addSource(imageDecoder.decodeAsRenderedImage(i));
+    parameterBlock.add(orgFileName_NoExt + Integer.toString(i) + "." + orgExt);
+    RenderedOp renderedOp = JAI.create("filestore", parameterBlock);
+    BufferedImage bufferedImage = renderedOp.getAsBufferedImage();
+    
+    //리사이징 처리
+    BufferedImage resizeBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    Graphics2D graphics2D = resizeBufferedImage.createGraphics();
+    graphics2D.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    graphics2D.drawImage(bufferedImage, 0, 0, width, height, null);
+    graphics2D.dispose();
+    
+    // PDF 페이지 객체 1장 생성
+    PDPage page = new PDPage(new PDRectangle(width, height));
+    pdfDoc.addPage(page);
+    // PDF 문서 객체에 페이지 1장 그리기
+    PDImageXObject pdImage = LosslessFactory.createFromImage(pdfDoc, resizeBufferedImage);
+    PDPageContentStream contentStream = new PDPageContentStream(pdfDoc, page);
+    contentStream.drawImage(pdImage, 0, 0, width, height);
+    // 1장 그릴 때마다 사용한 객체 닫기
+    contentStream.close();
+}
+```
+>>SOAP 호출
+* .net로 구성한 웹서비스를 호출하여 return을 받는다.
+* .net에서는 그냥 외부참조 추가하면 됐는데 자바는 아예 SOAP 규격에 맞는 XML을 만들어서 보내버린다...
+```java
+String requestXml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + 
+        "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" + 
+        "  <soap:Body>" + 
+        "    <함수명 xmlns=\"http://tempuri.org/\">" + 
+        "      <파라미터1><![CDATA["+  + "]]></파라미터1>" +
+        "      <파라미터2><![CDATA[" +  + "]]></파라미터2>" +
+        "      <파라미터3><![CDATA[" +  + "]]></파라미터3>" +
+        "    </함수명>" + 
+        "  </soap:Body>" + 
+        "</soap:Envelope>";
+        
+StringReader reader = new StringReader(requestXml);
+InputSource is = new InputSource(reader);
+Document document = parser.parse(is);
+DOMSource requestSource = new DOMSource(document);
+
+//SOAPMessage create
+MessageFactory messageFactory = MessageFactory.newInstance();
+SOAPMessage requestSoapMessage = messageFactory.createMessage(); 
+SOAPPart requestSoapPart = requestSoapMessage.getSOAPPart(); 
+requestSoapPart.setContent(requestSource);
+
+//SOAPConnection create instance
+SOAPConnectionFactory scf = SOAPConnectionFactory.newInstance();
+SOAPConnection connection = scf.createConnection();
+
+long startTime = System.currentTimeMillis();
+//SOAP SEND MESSAGE
+SOAPMessage responseSoapMessage = connection.call(requestSoapMessage, URL);
+ByteArrayOutputStream out = new ByteArrayOutputStream();
+responseSoapMessage.writeTo(out);
+
+long endTime = System.currentTimeMillis();
+long lTime = endTime - startTime;
+log.debug("Rendition Conversion Time : " + (lTime/1000) % 60 + "(second)");
+
+//SOAP Response
+String rtn = new String(out.toByteArray(), "UTF-8");
+StringReader resreader = new StringReader(rtn);
+InputSource resis = new InputSource(resreader);
+Document resdocument = parser.parse(resis);
+NodeList list = resdocument.getElementsByTagName("ConvertImageResult");
+Element row = (Element) list.item(0);
+String rtnXML = row.getChildNodes().item(0).getNodeValue();
+```
+>>다운로드 처리
+* 클라이언트가 파일을 열던 파일을 다운로드하던 별도의 다운로드 처리가 필요하다.
+* 별도의 클래스를 두어 dispatcher-servlet.xml 에 bean 추가
+```xml
+<bean id="fileView" class="egovframework.common.web.view.FileView" />
+```
+```java
+
+public class FileView extends AbstractView {
+	/** 로그 출력용 */
+	protected Logger log = LogManager.getLogger(this.getClass());
+
+	/** 파일 버퍼 사이즈 */
+	private static final int FILE_BUFF = 1024;
+
+	/**
+	 * @descrption : render Output Model
+	 * @date : 2020.12.02
+	 * @author : komsaco01
+	 * @param model
+	 * @param request
+	 * @param response
+	 * @throws Exception
+	 */
+	@Override
+	protected void renderMergedOutputModel(Map<String, Object> model, HttpServletRequest request, HttpServletResponse response) throws Exception {
+		String fileName = (String) model.get("fileName");
+		boolean attachMode = (model.get("attachMode")==null?false:(boolean) model.get("attachMode"));
+		BufferedInputStream is = null;
+		BufferedOutputStream os = null;
+		try {
+			File pathFile = null;
+            pathFile = new File((String) model.get("filePath"));
+			if (!pathFile.exists()) {
+				throw new Exception("파일정보가 존재하지 않습니다.");
+			}
+			setHeader(response, fileName, "UTF-8", attachMode);
+			os = new BufferedOutputStream(response.getOutputStream());
+			setLength(response, pathFile.length());
+			is = getBufferedOutputStream(pathFile);
+			fileOutput(os, is);
+		} catch (FileNotFoundException e) {
+			log.error(e.getMessage());
+			response.setContentType("text/html; charset=UTF-8");
+			PrintWriter printwriter = response.getWriter();
+			printwriter.println("<!DOCTYPE html>");
+			printwriter.println("<html>");
+			printwriter.println("<head>");
+			printwriter.println("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />");
+			printwriter.println("<script type=\"text/javascript\">");
+			printwriter.println("alert('해당 파일을 찾을수 없습니다.');");
+			printwriter.println("</script>");
+			printwriter.println("</head>");
+			printwriter.println("<body>");
+			printwriter.println("</body>");
+			printwriter.println("</html>");
+			printwriter.flush();
+			printwriter.close();
+		} finally {
+			IOUtils.closeQuietly(is);
+			IOUtils.closeQuietly(os);
+		}
+	}
+```
+
+* 파일다운로드와 일반 보기 상태를 구분해 경우에 따라 헤더를 다르게 지정함
+```java
+if (attachment) {
+    response.setContentType("application/x-msdownload");
+    response.setHeader("Content-Disposition", "attachment; filename=" + encodedFileName);
+} else {
+    response.setHeader("Content-Disposition", "inline; filename=" + encodedFileName);
+}
+```

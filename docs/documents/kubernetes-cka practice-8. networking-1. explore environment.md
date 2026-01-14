@@ -1,0 +1,71 @@
+---
+title: 
+parent: Documents
+layout: default
+---
+
+# 
+
+> Source: `kubernetes/cka practice/8. networking/1. explore environment.md`
+
+---
+
+1. How many nodes are part of this cluster?<br>
+Including the controlplane and worker nodes.
+    - kubectl get nodes 입력
+
+
+
+2. What is the Internal IP address of the controlplane node in this cluster?
+    - kubectl get nodes -o wide 입력
+
+
+
+3. What is the network interface configured for cluster connectivity on the controlplane node?<br>
+node-to-node communication
+    - kubectl get nodes -o wide 로 IP를 찾고
+    - ip a | grep 192.168.219.171 명령어로 네트워크 인터페이스를 찾는다.
+
+
+4. What is the MAC address of the interface on the controlplane node?
+    - ip link show eth0 명령어로 네트워크 인터페이스의 mac address를 확인할 수 있다.
+
+
+
+5. What is the IP address assigned to node01?
+    - kubectl get nodes -o wide 입력
+
+
+6. What is the MAC address assigned to node01?
+    - ssh node01 로 node01 로 들어간다.
+    - ip a | grep 192.168.212.177 로 네트워크 인터페이스를 알아내고
+    - ip link show eth0 으로 macaddress를 확인한다.
+
+
+7. We use Containerd as our container runtime. What is the interface/bridge created by Containerd on the controlplane node?
+    - ip 명령어를 쓰라는데 잘 모르겠다...
+
+
+
+
+8. What is the state of the interface cni0?
+    - ip link show cni0 입력
+
+
+9. If you were to ping google from the controlplane node, which route does it take?<br>
+What is the IP address of the Default Gateway?
+    - ip route show default 명령어 입력
+
+
+
+10. What is the port the kube-scheduler is listening on in the controlplane node?
+    - netstat -nplt 명령어로 3737/kube-scheduler 상태를 본다.
+
+
+11. Notice that ETCD is listening on two ports. Which of these have more client connections established?
+    - netstat -anp | grep etcd 명령어로 확인
+
+
+
+12. Correct! That's because 2379 is the port of ETCD to which all control plane components connect to. 2380 is only for etcd peer-to-peer connectivity. When you have multiple controlplane nodes. In this case we don't.
+    - 
